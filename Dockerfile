@@ -13,12 +13,15 @@ RUN \
 
 # Install packages
 RUN echo "postfix postfix/main_mailer_type string Local only" | debconf-set-selections 
-RUN echo "postfix postfix/mailname string localhost" | debconf-set-selections
+RUN echo "postfix postfix/mailname string localhost.localdomain" | debconf-set-selections
 RUN \ 
-  apt-get install -y --no-install-recommends apache2 curl git libapache2-mod-php5 make php5-gd php5-mysql php5-dev php-pear postfix redis-server zip && \
+  apt-get install -y --no-install-recommends apache2 curl git less libapache2-mod-php5 make mysql-client php5-gd php5-mysql php5-dev php-pear postfix redis-server sudo tree vim zip && \
   apt-get clean
 
-## 2/ Dependencies (redis-server is not installed -> use additional docker container)
+## 2/ Dependencies
+
+# Configure redis-server
+RUN sed -i 's/^\(daemonize\s*\)yes\s*$/\1no/g' /etc/redis/redis.conf
 
 # Install PEAR packages
 RUN \
@@ -91,14 +94,32 @@ RUN a2enmod rewrite
 
 ## 8/ MISP configuration
 # Parts are included in run.sh (see readme)
+ADD gpg/.gnupg /var/www/MISP/.gnupg
+RUN \
+  chown -R www-data:www-data /var/www/MISP/.gnupg && \
+  chmod 700 /var/www/MISP/.gnupg && \
+  chmod 0600 /var/www/MISP/.gnupg/*
+ADD gpg/gpg.asc /var/www/MISP/app/webroot/gpg.asc
+RUN \
+  chown -R www-data:www-data /var/www/MISP/app/webroot/gpg.asc && \
+  chmod 0644 /var/www/MISP/app/webroot/gpg.asc
+
+# Add modified bootstrap.default.php
+ADD bootstrap.default.php /var/www/MISP/app/Config/bootstrap.default.php
+RUN \
+  chown www-data:www-data /var/www/MISP/app/Config/bootstrap.default.php && \
+  chmod 0750 /var/www/MISP/app/Config/bootstrap.default.php
+
+## Finished MISP INSTALL.txt
 
 # Configure supervisord
 RUN \
+  echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo '[program:postfix]' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo 'process_name = master' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo 'directory = /etc/postfix' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo 'command = /usr/sbin/postfix -c /etc/postfix start' >> /etc/supervisor/conf.d/supervisord.conf && \
-  echo 'startsecs = 0 >> /etc/supervisor/conf.d/supervisord.conf' && \
+  echo 'startsecs = 0' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo 'autorestart = false' >> /etc/supervisor/conf.d/supervisord.conf
 
 RUN \
@@ -111,11 +132,18 @@ RUN \
   echo '[program:apache2]' >> /etc/supervisor/conf.d/supervisord.conf && \
   echo 'command=/bin/bash -c "source /etc/apache2/envvars && exec /usr/sbin/apache2 -D FOREGROUND"' >> /etc/supervisor/conf.d/supervisord.conf
 
+RUN \
+  echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+  echo '[program:resque]' >> /etc/supervisor/conf.d/supervisord.conf && \
+  echo 'command=/bin/bash /var/www/MISP/app/Console/worker/start.sh' >> /etc/supervisor/conf.d/supervisord.conf && \
+  echo 'startsecs = 0' >> /etc/supervisor/conf.d/supervisord.conf && \
+  echo 'autorestart = false' >> /etc/supervisor/conf.d/supervisord.conf
+
 # Add run script
 ADD run.sh /run.sh
 RUN chmod 0755 /run.sh
 
 # TODO: Expose volume with apache logs?
 
-EXPOSE 22 80
-CMD["/run.sh"]
+EXPOSE 80
+CMD ["/run.sh"]

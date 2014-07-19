@@ -66,8 +66,6 @@ fi
 cd /var/www/MISP/app/Config
 
 cp -a bootstrap.default.php bootstrap.php
-# TODO: experimental
-#sed -i "s/'GnuPG\.onlyencrypted',\s*'true'/'GnuPG.onlyencrypted', 'false'/" bootstrap.php
 
 cp -a database.default.php database.php
 sed -i "s/127\.0\.0\.1/$MYSQL_PORT_3306_TCP_ADDR/" database.php
