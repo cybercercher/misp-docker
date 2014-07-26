@@ -86,6 +86,4 @@ chmod -R 750 /var/www/MISP/app/Config
 
 # Start supervisord 
 cd /
-source /etc/apache2/envvars
-#exec apache2 -D FOREGROUND
 exec /usr/bin/supervisord
